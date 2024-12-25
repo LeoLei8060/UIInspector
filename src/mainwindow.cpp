@@ -4,6 +4,8 @@
 #include <QApplication>
 #include <QMouseEvent>
 #include <QScreen>
+#include <QElapsedTimer>
+#include <QStatusBar>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -23,6 +25,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     resize(800, 600);
     setWindowTitle("UI Inspector");
+    statusBar();
 }
 
 void MainWindow::startCapture()
@@ -38,6 +41,9 @@ void MainWindow::processCapture()
     m_captureButton->setText("Drag to capture");
     setCursor(Qt::ArrowCursor);
 
+    QElapsedTimer timer;
+    timer.start();
+
     POINT pt;
     GetCursorPos(&pt);
 
@@ -50,6 +56,9 @@ void MainWindow::processCapture()
 
     UIAInspector inspector;
     inspector.inspectWindow(hwnd, m_componentList);
+
+    qint64 elapsed = timer.elapsed();
+    statusBar()->showMessage(QString("Capture completed in %1 ms").arg(elapsed));
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)

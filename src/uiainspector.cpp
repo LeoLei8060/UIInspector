@@ -43,6 +43,20 @@ void UIAInspector::inspectElement(IUIAutomationElement *element, QTreeWidget *tr
     if (!element)
         return;
 
+    RECT rect;
+    element->get_CurrentBoundingRectangle(&rect);
+    
+    if (rect.right <= rect.left || rect.bottom <= rect.top) {
+        return;
+    }
+
+    RECT screenRect;
+    SystemParametersInfo(SPI_GETWORKAREA, 0, &screenRect, 0);
+    if (rect.right < screenRect.left || rect.left > screenRect.right ||
+        rect.bottom < screenRect.top || rect.top > screenRect.bottom) {
+        return;
+    }
+
     CONTROLTYPEID controlType;
     element->get_CurrentControlType(&controlType);
 
@@ -53,6 +67,7 @@ void UIAInspector::inspectElement(IUIAutomationElement *element, QTreeWidget *tr
     SysFreeString(name);
 
     QTreeWidgetItem *item;
+#if 1 // opt
     if (parentItem) {
         item = new QTreeWidgetItem(parentItem);
     } else {
@@ -63,7 +78,7 @@ void UIAInspector::inspectElement(IUIAutomationElement *element, QTreeWidget *tr
     item->setText(1, elementName);
     item->setText(2, getElementRect(element));
     item->setText(3, getElementStates(element));
-
+#endif
     IUIAutomationTreeWalker *walker;
     m_automation->get_ControlViewWalker(&walker);
     if (walker) {
