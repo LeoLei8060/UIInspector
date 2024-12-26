@@ -2,9 +2,10 @@
 #include "uiainspector.h"
 #include <Windows.h>
 #include <QApplication>
+#include <QDebug>
+#include <QElapsedTimer>
 #include <QMouseEvent>
 #include <QScreen>
-#include <QElapsedTimer>
 #include <QStatusBar>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -51,11 +52,12 @@ void MainWindow::processCapture()
     if (!hwnd) {
         return;
     }
+    qDebug() << "pt: " << QPoint(pt.x, pt.y);
 
     m_componentList->clear();
 
     UIAInspector inspector;
-    inspector.inspectWindow(hwnd, m_componentList);
+    inspector.inspectWindow(hwnd, m_componentList, pt);
 
     qint64 elapsed = timer.elapsed();
     statusBar()->showMessage(QString("Capture completed in %1 ms").arg(elapsed));
