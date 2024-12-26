@@ -1,5 +1,6 @@
 #include "uiainspector.h"
 #include <QDebug>
+#include <QElapsedTimer>
 
 UIAInspector::UIAInspector()
     : m_automation(nullptr)
@@ -43,61 +44,129 @@ void UIAInspector::inspectElement(IUIAutomationElement *element,
                                   QTreeWidgetItem      *parentItem,
                                   const POINT          &pt)
 {
-    if (!element)
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+
+    if (!element || !m_automation)
         return;
 
-    RECT rect;
-    element->get_CurrentBoundingRectangle(&rect);
+    QElapsedTimer createTimer;
+    createTimer.start();
 
-    if (rect.right <= rect.left || rect.bottom <= rect.top) {
+    IUIAutomationCondition *visibleCondition = nullptr;
+    VARIANT                 varProp;
+    varProp.vt = VT_BOOL;
+    varProp.boolVal = VARIANT_FALSE; // NOT IsOffscreen
+    m_automation->CreatePropertyCondition(UIA_IsOffscreenPropertyId, varProp, &visibleCondition);
+
+    qint64 createTime = createTimer.elapsed();
+    qDebug() << "create time:" << createTime << "ms";
+
+    QElapsedTimer findAllTimer;
+    findAllTimer.start();
+
+    IUIAutomationElementArray *elements = nullptr;
+    HRESULT hr = element->FindAll(TreeScope_Subtree, visibleCondition, &elements);
+    visibleCondition->Release();
+
+    qint64 findAllTime = findAllTimer.elapsed();
+    qDebug() << "FindAll time:" << findAllTime << "ms";
+
+    if (FAILED(hr) || !elements)
         return;
+
+    int count = 0;
+    elements->get_Length(&count);
+    qDebug() << "count:" << count;
+
+    QElapsedTimer loopTimer;
+    loopTimer.start();
+
+    for (int i = 0; i < count; i++) {
+        IUIAutomationElement *childElement = nullptr;
+        if (SUCCEEDED(elements->GetElement(i, &childElement)) && childElement) {
+            RECT rect;
+            childElement->get_CurrentBoundingRectangle(&rect);
+
+            CONTROLTYPEID controlType;
+            childElement->get_CurrentControlType(&controlType);
+
+            BSTR name;
+            childElement->get_CurrentName(&name);
+            QString elementName = QString::fromWCharArray(name ? name : L"");
+            SysFreeString(name);
+
+            QTreeWidgetItem *item;
+            if (parentItem) {
+                item = new QTreeWidgetItem(parentItem);
+            } else {
+                item = new QTreeWidgetItem(tree);
+            }
+            item->setText(0, getControlTypeName(controlType));
+            item->setText(1, elementName);
+            item->setText(2, getElementRect(childElement));
+            item->setText(3, getElementStates(childElement));
+            if (rect.right > rect.left && rect.bottom > rect.top && pt.x >= rect.left
+                && pt.x <= rect.right && pt.y >= rect.top && pt.y <= rect.bottom) {
+                qDebug() << elementName << rect.left << rect.top << rect.right << rect.bottom;
+            }
+            childElement->Release();
+        }
     }
 
-    //        RECT screenRect;
-    //        SystemParametersInfo(SPI_GETWORKAREA, 0, &screenRect, 0);
-    //        if (rect.right < screenRect.left || rect.left > screenRect.right || rect.bottom < screenRect.top
-    //            || rect.top > screenRect.bottom) {
-    //            return;
-    //        }
-    //    if (pt.x < rect.left || pt.x > rect.right || pt.y < rect.top || pt.y > rect.bottom)
-    //        return;
+    qint64 loopTime = loopTimer.elapsed();
+    qDebug() << "Loop time:" << loopTime << "ms";
+
+    elements->Release();
+
+    qint64 totalTime = totalTimer.elapsed();
+    qDebug() << "Total time:" << totalTime << "ms";
+}
+
+void UIAInspector::quickInspect(const POINT &pt, QTreeWidget *tree)
+{
+    if (!m_automation || !tree)
+        return;
+
+    QElapsedTimer timer;
+    timer.start();
+
+    IUIAutomationElement *element = nullptr;
+    HRESULT hr = m_automation->ElementFromPoint(pt, &element);
+
+    if (SUCCEEDED(hr) && element) {
+        tree->clear();
+        QTreeWidgetItem *item = new QTreeWidgetItem(tree);
+        addElementToTree(element, tree, item);
+        element->Release();
+    }
+
+    qint64 elapsed = timer.elapsed();
+    qDebug() << "Quick inspect time:" << elapsed << "ms";
+}
+
+void UIAInspector::addElementToTree(IUIAutomationElement *element,
+                                    QTreeWidget          *tree,
+                                    QTreeWidgetItem      *item)
+{
+    if (!element || !item)
+        return;
 
     CONTROLTYPEID controlType;
     element->get_CurrentControlType(&controlType);
 
     BSTR name;
     element->get_CurrentName(&name);
-
     QString elementName = QString::fromWCharArray(name ? name : L"");
     SysFreeString(name);
 
-    QTreeWidgetItem *item;
-#if 1 // opt
-    if (parentItem) {
-        item = new QTreeWidgetItem(parentItem);
-    } else {
-        item = new QTreeWidgetItem(tree);
-    }
+    RECT rect;
+    element->get_CurrentBoundingRectangle(&rect);
 
     item->setText(0, getControlTypeName(controlType));
     item->setText(1, elementName);
     item->setText(2, getElementRect(element));
     item->setText(3, getElementStates(element));
-#endif
-    IUIAutomationTreeWalker *walker;
-    m_automation->get_ControlViewWalker(&walker);
-    if (walker) {
-        IUIAutomationElement *child;
-        walker->GetFirstChildElement(element, &child);
-        while (child) {
-            inspectElement(child, tree, item, pt);
-            IUIAutomationElement *next;
-            walker->GetNextSiblingElement(child, &next);
-            child->Release();
-            child = next;
-        }
-        walker->Release();
-    }
 }
 
 QString UIAInspector::getControlTypeName(CONTROLTYPEID controlType)

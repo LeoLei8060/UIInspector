@@ -47,20 +47,15 @@ void MainWindow::processCapture()
 
     POINT pt;
     GetCursorPos(&pt);
-
-    HWND hwnd = WindowFromPoint(pt);
-    if (!hwnd) {
-        return;
-    }
-    qDebug() << "pt: " << QPoint(pt.x, pt.y);
+    qDebug() << "pt:" << QPoint(pt.x, pt.y);
 
     m_componentList->clear();
 
     UIAInspector inspector;
-    inspector.inspectWindow(hwnd, m_componentList, pt);
+    inspector.quickInspect(pt, m_componentList);
 
     qint64 elapsed = timer.elapsed();
-    statusBar()->showMessage(QString("Capture completed in %1 ms").arg(elapsed));
+    statusBar()->showMessage(QString("Quick capture completed in %1 ms").arg(elapsed));
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
